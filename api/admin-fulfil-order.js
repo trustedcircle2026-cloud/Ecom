@@ -18,7 +18,7 @@ export default async function handler(req,res){
   for(const v of vouchers){
    const itemId=String(v.order_item_id||''),code=String(v.code||'').trim(),pin=String(v.pin||'').trim(),expiry=v.expiry_date||null
    if(!counts.has(itemId)||!code)return reply(res,400,{error:'Each voucher needs a valid order item and code'})
-   if(expiry&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(expiry))return reply(res,400,{error:'Expiry dates must use YYYY-MM-DD'})
+   if(expiry&&!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(expiry))return reply(res,400,{error:'Expiry dates must use YYYY-MM-DD'})
    counts.set(itemId,counts.get(itemId)+1)
    rows.push({order_item_id:itemId,code,pin:pin||null,expiry_date:expiry})
   }
