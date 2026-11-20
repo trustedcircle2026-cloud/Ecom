@@ -67,8 +67,32 @@ function App() {
   const signOut = async () => { await supabase?.auth.signOut(); setAccountOpen(false); setNotice('You have signed out.') }
   const checkout = async () => {
     if (!session) { setCartOpen(false); setNotice('Sign in with Google to continue to checkout.'); setAccountOpen(true); return }
-    if (!cart.length) return
-    setNotice('Checkout API setup is required before accepting live payments. See README for secure Razorpay deployment steps.')
+    if (!cart.length || !supabase) return
+    setLoading(true)
+    try {
+      const { data:{session:activeSession} } = await supabase.auth.getSession()
+      const response = await fetch('/api/create-order', { method:'POST', headers:{'Content-Type':'application/json',Authorization:'Bearer '+activeSession.access_token}, body:JSON.stringify({items:cart.map(x=>({productId:x.id,quantity:x.qty}))}) })
+      const order = await response.json()
+      if (!response.ok) throw new Error(order.error || 'Could not start checkout')
+      if (!window.Razorpay) await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://checkout.razorpay.com/v1/checkout.js';script.onload=resolve;script.onerror=()=>reject(new Error('Unable to load payment checkout'));document.body.appendChild(script)})
+      const razorpay = new window.Razorpay({
+        key:order.keyId, amount:order.amount, currency:order.currency, name:'Trusted Circle',
+        description:'Digital gift card purchase', order_id:order.razorpayOrderId,
+        prefill:{name:profile?.name,email:profile?.email}, theme:{color:'#1c4435'},
+        handler:async payment=>{
+          try {
+            const verified=await fetch('/api/verify-payment',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+activeSession.access_token},body:JSON.stringify({...payment,order_id:order.orderId})})
+            const result=await verified.json()
+            if(!verified.ok) throw new Error(result.error || 'Payment verification failed')
+            setCart([]);setCartOpen(false);setNotice('Payment verified. Your order is being prepared.')
+          } catch(e) { setNotice(e.message || 'Payment verification failed') }
+        },
+        modal:{ondismiss:()=>setNotice('Checkout closed. Your order remains unpaid until payment is verified.')}
+      })
+      razorpay.on('payment.failed',r=>setNotice(r.error?.description || 'Payment failed. Please try again.'))
+      razorpay.open()
+    } catch(e) { setNotice(e.message || 'Unable to start checkout') }
+    finally { setLoading(false) }
   }
   const isAdmin = session?.user?.email && session.user.email === import.meta.env.VITE_ADMIN_EMAIL
 
@@ -96,7 +120,7 @@ function App() {
     </main>
     <footer><a className="logo footer-logo" href="#"><span className="logo-icon"><Gift size={19}/></span><span>trusted<span className="logo-light">circle</span><small>GIFTS THAT FEEL RIGHT</small></span></a><span>© {new Date().getFullYear()} Trusted Circle. Made for the moments that matter.</span><div><a href="#shop">Shop</a><a href="#how">How it works</a></div></footer>
     {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice('')}><X size={15}/></button></div>}
-    {cartOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setCartOpen(false)}><aside className="drawer"><div className="drawer-head"><div><span className="eyebrow">YOUR SELECTION</span><h2>Your bag <small>({count})</small></h2></div><button className="icon-btn" onClick={()=>setCartOpen(false)}><X/></button></div>{cart.length?<><div className="cart-lines">{cart.map(item=><div className="cart-line" key={item.id}><div className="mini-card" style={{'--brand':item.color}}><Gift/></div><div className="cart-detail"><b>{item.brand} Gift Card</b><span>{money(item.amount)}</span><div className="qty"><button onClick={()=>changeQty(item.id,-1)}><Minus size={13}/></button>{item.qty}<button onClick={()=>changeQty(item.id,1)}><Plus size={13}/></button><button className="remove" onClick={()=>setCart(old=>old.filter(x=>x.id!==item.id))}><Trash2 size={13}/></button></div></div><b>{money(item.price*item.qty)}</b></div>)}</div><div className="cart-summary"><div><span>Subtotal</span><b>{money(total)}</b></div><div><span>Delivery</span><b>Free</b></div><div className="grand-total"><span>Total</span><b>{money(total)}</b></div><button className="primary-btn checkout-btn" onClick={checkout}>Continue to checkout <ArrowRight size={17}/></button><p><ShieldCheck size={14}/> Secure payment · Digital delivery</p></div></>:<div className="empty-cart"><ShoppingBag size={38}/><h3>Your bag is waiting</h3><p>Add a gift card to get started.</p><button className="primary-btn" onClick={()=>setCartOpen(false)}>Explore gifts</button></div>}</aside></div>}
+    {cartOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setCartOpen(false)}><aside className="drawer"><div className="drawer-head"><div><span className="eyebrow">YOUR SELECTION</span><h2>Your bag <small>({count})</small></h2></div><button className="icon-btn" onClick={()=>setCartOpen(false)}><X/></button></div>{cart.length?<><div className="cart-lines">{cart.map(item=><div className="cart-line" key={item.id}><div className="mini-card" style={{'--brand':item.color}}><Gift/></div><div className="cart-detail"><b>{item.brand} Gift Card</b><span>{money(item.amount)}</span><div className="qty"><button onClick={()=>changeQty(item.id,-1)}><Minus size={13}/></button>{item.qty}<button onClick={()=>changeQty(item.id,1)}><Plus size={13}/></button><button className="remove" onClick={()=>setCart(old=>old.filter(x=>x.id!==item.id))}><Trash2 size={13}/></button></div></div><b>{money(item.price*item.qty)}</b></div>)}</div><div className="cart-summary"><div><span>Subtotal</span><b>{money(total)}</b></div><div><span>Delivery</span><b>Free</b></div><div className="grand-total"><span>Total</span><b>{money(total)}</b></div><button className="primary-btn checkout-btn" onClick={checkout} disabled={loading}>{loading ? "Preparing checkout..." : "Continue to checkout"} <ArrowRight size={17}/></button><p><ShieldCheck size={14}/> Secure payment · Digital delivery</p></div></>:<div className="empty-cart"><ShoppingBag size={38}/><h3>Your bag is waiting</h3><p>Add a gift card to get started.</p><button className="primary-btn" onClick={()=>setCartOpen(false)}>Explore gifts</button></div>}</aside></div>}
     {accountOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setAccountOpen(false)}><aside className="account-modal"><button className="icon-btn modal-close" onClick={()=>setAccountOpen(false)}><X/></button><span className="logo-icon"><UserRound/></span><h2>{session?'Welcome back':'A little account, a lot of convenience.'}</h2><p>{session?'You are signed in to Trusted Circle.':'Sign in to save your bag, view your orders and keep your gifts together.'}</p>{session?<><div className="profile-row">{profile?.avatar&&<img src={profile.avatar} alt=""/>}<div><b>{profile?.name}</b><span>{profile?.email}</span></div></div><button className="primary-btn full-btn" onClick={()=>{setAccountOpen(false);setAdminOpen(true)}}>My account <ArrowRight size={16}/></button><button className="secondary-btn full-btn" onClick={signOut}><LogOut size={16}/> Sign out</button></>:<button className="google-btn" onClick={signIn} disabled={loading}><span>G</span>{loading?'Connecting...':'Continue with Google'}<ArrowRight size={16}/></button>}<small className="modal-note">By continuing, you agree to our Terms and Privacy Policy.</small></aside></div>}
     {adminOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setAdminOpen(false)}><aside className="drawer admin-drawer"><div className="drawer-head"><div><span className="eyebrow">ACCOUNT</span><h2>My account</h2></div><button className="icon-btn" onClick={()=>setAdminOpen(false)}><X/></button></div><div className="admin-welcome"><LayoutDashboard/><div><b>{profile?.name}</b><span>{profile?.email}</span></div></div><div className="account-links"><button><Package/> My orders <ArrowRight/></button><button><UserRound/> Profile details <ArrowRight/></button></div><p className="muted">Order history and voucher delivery will appear here after the order service is configured.</p></aside></div>}
   </div>
