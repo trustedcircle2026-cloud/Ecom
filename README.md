@@ -7,7 +7,7 @@ A digital gift-card storefront built with React + Vite, Supabase Auth/Postgres, 
 - Responsive customer storefront and brand/category filtering.
 - Initial brands: Amazon, Flipkart, Myntra, Swiggy, Zomato, Tata CLiQ, Croma and Other brands.
 - Live product catalogue from Supabase; product prices are read again by the server during checkout.
-- Local shopping cart with quantity controls.
+- Local shopping cart with quantity controls and Supabase persistence for signed-in customers.
 - Google sign-in and sign-out through Supabase Auth.
 - Single-admin access based on the `admin_users` table, never a browser-supplied email flag.
 - Admin workspace: product creation, activation/deactivation, order list, and secure bulk voucher upload.
