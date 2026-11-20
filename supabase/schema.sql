@@ -82,6 +82,15 @@ create table if not exists public.order_items (
   created_at timestamptz not null default now()
 );
 alter table public.voucher_inventory add constraint voucher_inventory_order_item_fk foreign key(order_item_id) references public.order_items(id);
+create table if not exists public.order_vouchers (
+  id uuid primary key default gen_random_uuid(),
+  order_item_id uuid not null references public.order_items(id) on delete cascade,
+  code text not null,
+  pin text,
+  expiry_date date,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   order_id uuid not null references public.orders(id),
@@ -123,6 +132,7 @@ alter table public.carts enable row level security;
 alter table public.cart_items enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
+alter table public.order_vouchers enable row level security;
 alter table public.payments enable row level security;
 alter table public.webhook_events enable row level security;
 alter table public.admin_users enable row level security;
@@ -142,6 +152,7 @@ create policy "carts own" on public.carts for all using (user_id = auth.uid() or
 create policy "cart items own" on public.cart_items for all using (exists(select 1 from public.carts c where c.id = cart_id and (c.user_id = auth.uid() or public.is_admin()))) with check (exists(select 1 from public.carts c where c.id = cart_id and (c.user_id = auth.uid() or public.is_admin())));
 create policy "orders own read" on public.orders for select using (user_id = auth.uid() or public.is_admin());
 create policy "order items own read" on public.order_items for select using (exists(select 1 from public.orders o where o.id = order_id and (o.user_id = auth.uid() or public.is_admin())));
+create policy "order vouchers customer read" on public.order_vouchers for select using (exists(select 1 from public.order_items i join public.orders o on o.id=i.order_id where i.id=order_item_id and (o.user_id=auth.uid() or public.is_admin())));
 create policy "payments own read" on public.payments for select using (exists(select 1 from public.orders o where o.id = order_id and (o.user_id = auth.uid() or public.is_admin())));
 create policy "inventory admin only" on public.voucher_inventory for all using (public.is_admin()) with check (public.is_admin());
 create policy "webhook events admin only" on public.webhook_events for all using (public.is_admin()) with check (public.is_admin());
