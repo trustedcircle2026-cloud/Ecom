@@ -105,7 +105,7 @@ function App() {
             const verified=await fetch('/api/verify-payment',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+activeSession.access_token},body:JSON.stringify({...payment,order_id:order.orderId})})
             const result=await verified.json()
             if(!verified.ok) throw new Error(result.error || 'Payment verification failed')
-            setCart([]);setCartOpen(false);setNotice('Payment response received. Your order will show as Paid after Razorpay confirms it through the webhook. Check My Orders shortly.')
+            setCart([]);setCartOpen(false);setNotice('Payment submitted. Your order will show as Paid after Razorpay confirms it through the webhook. Check My Orders shortly.')
           } catch(e) { setNotice(e.message || 'Payment verification failed') }
         },
         modal:{ondismiss:()=>setNotice('Checkout closed. Your order remains unpaid until payment is verified.')}
@@ -117,7 +117,7 @@ function App() {
   }
 
   return <div className="app">
-    <div className="announcement"><Sparkles size={13}/> A little joy, delivered instantly <span>•</span> Digital gift cards, made easy</div>
+    <div className="announcement"><Sparkles size={13}/> A little joy, delivered with care <span>•</span> Digital gift cards, made easy</div>
     <header className="header">
       <a className="logo" href="#"><span className="logo-icon"><Gift size={21}/></span><span>trusted<span className="logo-light">circle</span><small>GIFTS THAT FEEL RIGHT</small></span></a>
       <nav className="desktop-nav"><a href="#shop">Explore gifts</a><a href="#brands">Brands</a><a href="#how">How it works</a></nav>
