@@ -1,4 +1,4 @@
-import {db,reply,adminFromRequest,encryptSecret} from './_lib.js'
+import {db,reply,adminFromRequest} from './_lib.js'
 export default async function handler(req,res){
  if(req.method!=='POST')return reply(res,405,{error:'Method not allowed'})
  try{
@@ -12,11 +12,11 @@ export default async function handler(req,res){
   for(const item of vouchers){
    const code=String(item?.code||'').trim(),pin=String(item?.pin||'').trim(),expiry=item?.expiry_date||null
    if(!code)return reply(res,400,{error:'Every voucher row must contain a voucher code'})
-   if(expiry&&!/^\d{4}-\d{2}-\d{2}$/.test(expiry))return reply(res,400,{error:'Expiry dates must use YYYY-MM-DD'})
-   rows.push({product_id,code_ciphertext:encryptSecret(code),pin_ciphertext:pin?encryptSecret(pin):null,expiry_date:expiry,status:'available',uploaded_by:user.id})
+   if(expiry&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(expiry))return reply(res,400,{error:'Expiry dates must use YYYY-MM-DD'})
+   rows.push({product_id,code,pin:pin||null,expiry_date:expiry,status:'available',uploaded_by:user.id})
   }
   const {error}=await db.from('voucher_inventory').insert(rows)
   if(error)throw error
-  return reply(res,201,{uploaded:rows.length})
- }catch(e){console.error('voucher upload',e);return reply(res,500,{error:e.message?.includes('VOUCHER_ENCRYPTION_KEY')?e.message:'Unable to upload voucher inventory'})}
+  return reply(res,201,{uploaded:rows.length,message:'Voucher codes uploaded'})
+ }catch(e){console.error('voucher upload',e);return reply(res,500,{error:'Unable to upload voucher inventory'})}
 }
