@@ -79,7 +79,7 @@ function App() {
   const add = product => { setCart(old => { const found = old.find(x => x.id === product.id); return found ? old.map(x => x.id === product.id ? {...x, qty:x.qty+1} : x) : [...old, {...product, qty:1}] }); setNotice('Added to your bag'); setCartOpen(true) }
   const changeQty = (id, delta) => setCart(old => old.map(x => x.id === id ? {...x, qty:x.qty+delta} : x).filter(x => x.qty > 0))
   const signIn = async () => {
-    if (!supabase) { setNotice('Add your Supabase URL and anon key in Vercel environment variables first.'); return }
+    if (!supabase) { setNotice('Add your Supabase URL and anon key in your Netlify environment variables first.'); return }
     setLoading(true)
     const { error } = await supabase.auth.signInWithOAuth({ provider:'google', options:{ redirectTo:window.location.origin } })
     if (error) setNotice(error.message)
@@ -105,7 +105,7 @@ function App() {
             const verified=await fetch('/api/verify-payment',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+activeSession.access_token},body:JSON.stringify({...payment,order_id:order.orderId})})
             const result=await verified.json()
             if(!verified.ok) throw new Error(result.error || 'Payment verification failed')
-            setCart([]);setCartOpen(false);setNotice('Payment verified. Your order is being prepared.')
+            setCart([]);setCartOpen(false);setNotice('Payment response received. Your order will show as Paid after Razorpay confirms it through the webhook. Check My Orders shortly.')
           } catch(e) { setNotice(e.message || 'Payment verification failed') }
         },
         modal:{ondismiss:()=>setNotice('Checkout closed. Your order remains unpaid until payment is verified.')}
