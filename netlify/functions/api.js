@@ -26,31 +26,25 @@ const routes = {
 
 export const handler = async event => {
   const path = event.path || new URL(event.rawUrl).pathname
-  const route = path.includes('/.netlify/functions/api/')
-    ? path.split('/.netlify/functions/api/')[1]
-    : path.replace(/^\\/api\\//, '')
-  const name = (route || '').split('/')[0].replace(/\\.js$/, '')
+  let route = ''
+  const functionPrefix = '/.netlify/functions/api/'
+  if (path.includes(functionPrefix)) route = path.split(functionPrefix)[1] || ''
+  else if (path.startsWith('/api/')) route = path.slice(5)
+  const name = route.split('/')[0].replace('.js', '')
   const apiHandler = routes[name]
   if (!apiHandler) return { statusCode: 404, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'API route not found' }) }
 
-  const raw = event.isBase64Encoded
-    ? Buffer.from(event.body || '', 'base64')
-    : Buffer.from(event.body || '', 'utf8')
+  const raw = event.isBase64Encoded ? Buffer.from(event.body || '', 'base64') : Buffer.from(event.body || '', 'utf8')
   let body = {}
   if (raw.length && name !== 'razorpay-webhook') {
-    try { body = JSON.parse(raw.toString('utf8')) } catch { return { statusCode: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Invalid JSON body' }) } }
+    try { body = JSON.parse(raw.toString('utf8')) }
+    catch { return { statusCode: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Invalid JSON body' }) } }
   }
   const headers = Object.fromEntries(Object.entries(event.headers || {}).map(([key, value]) => [key.toLowerCase(), value]))
   const url = new URL(event.rawUrl || `https://netlify.local${path}`)
-  const req = {
-    method: event.httpMethod || 'GET',
-    headers,
-    body,
-    query: Object.fromEntries(url.searchParams.entries())
-  }
-  if (name === 'razorpay-webhook') {
-    req[Symbol.asyncIterator] = async function* () { yield raw }
-  }
+  const req = { method: event.httpMethod || 'GET', headers, body, query: Object.fromEntries(url.searchParams.entries()) }
+  if (name === 'razorpay-webhook') req[Symbol.asyncIterator] = async function* () { yield raw }
+
   let statusCode = 200
   const responseHeaders = { 'Content-Type': 'application/json' }
   let responseBody = ''
