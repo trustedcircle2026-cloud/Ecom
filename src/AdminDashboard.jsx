@@ -19,7 +19,7 @@ export default function AdminDashboard({session,onClose}){
   const vouchers=[]
   for(const item of order.order_items||[]){
    const raw=voucherDrafts[item.id]||''
-   const lines=raw.split(/\\r?\\n/).map(x=>x.trim()).filter(Boolean)
+   const lines=raw.split(String.fromCharCode(10)).map(x=>x.trim()).filter(Boolean)
    if(lines.length!==Number(item.quantity)){setMessage(item.product_name+': enter exactly '+item.quantity+' voucher code line(s).');return}
    for(const line of lines){
     const [code,pin='',expiry_date='']=line.split(',').map(x=>x.trim())
