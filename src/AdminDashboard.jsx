@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react'
-import {X,PackagePlus,ClipboardList,RefreshCw,ShieldCheck,Copy,CheckCircle2} from 'lucide-react'
+import {X,PackagePlus,ClipboardList,RefreshCw,ShieldCheck,CheckCircle2} from 'lucide-react'
 
 const money=n=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(Number(n||0))
 const field={width:'100%',padding:'11px 12px',border:'1px solid #dce3da',borderRadius:5,background:'#fff',fontSize:12,color:'#234638',outlineColor:'#a77a52'}
