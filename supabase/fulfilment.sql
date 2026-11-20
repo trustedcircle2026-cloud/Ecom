@@ -4,6 +4,8 @@ create index if not exists voucher_inventory_available_idx on public.voucher_inv
 create index if not exists voucher_inventory_order_item_idx on public.voucher_inventory(order_item_id);
 create index if not exists voucher_inventory_reservation_idx on public.voucher_inventory(reserved_until) where status='reserved';
 create index if not exists orders_user_created_idx on public.orders(user_id,created_at desc);
+-- This deployment is intentionally single-admin: only one row can be allowlisted.
+create unique index if not exists admin_users_single_admin_idx on public.admin_users ((true));
 
 create or replace function public.reserve_order_vouchers(p_order_id uuid)
 returns jsonb language plpgsql security definer set search_path=public as $$
