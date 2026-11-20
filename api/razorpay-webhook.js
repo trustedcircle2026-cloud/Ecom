@@ -27,6 +27,8 @@ export default async function handler(req,res){
   }else if(event.event==='payment.failed'&&payment?.order_id){
    const {error:paymentError}=await supabase.from('payments').update({provider_payment_id:payment.id,status:'failed'}).eq('provider_order_id',payment.order_id)
    if(paymentError)throw paymentError
+   const {data:order}=await supabase.from('orders').select('id').eq('razorpay_order_id',payment.order_id).maybeSingle()
+   if(order){const {data:items}=await supabase.from('order_items').select('id').eq('order_id',order.id);const {error:releaseError}=await supabase.from('voucher_inventory').update({status:'available',order_item_id:null,reserved_until:null}).eq('status','reserved').in('order_item_id',(items||[]).map(x=>x.id));if(releaseError)throw releaseError}
    const {error:orderError}=await supabase.from('orders').update({status:'payment_failed'}).eq('razorpay_order_id',payment.order_id).eq('status','pending_payment')
    if(orderError)throw orderError
   }
