@@ -14,7 +14,8 @@ A digital gift-card storefront built with React + Vite, Supabase Auth/Postgres, 
 - Voucher code/PIN encryption using AES-256-GCM before storage.
 - Server-side Razorpay order creation and payment signature verification.
 - Razorpay webhook signature verification with event IDs and retry-safe order processing.
-- Atomic voucher allocation using PostgreSQL row locks and `SKIP LOCKED`.
+- Atomic 30-minute stock reservations before payment, followed by voucher allocation using PostgreSQL row locks and `SKIP LOCKED`.
+- Single-admin allowlist enforced by a unique database index.
 - Customer order history and voucher reveal only after the order is fulfilled.
 - Admin retry for paid orders waiting for voucher inventory.
 
