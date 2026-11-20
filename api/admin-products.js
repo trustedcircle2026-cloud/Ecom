@@ -6,8 +6,7 @@ export default async function handler(req,res){
   if(req.method==='GET'){
    const {data,error}=await db.from('products').select('id,name,brand,category,denomination,selling_price,is_active,created_at').order('created_at',{ascending:false})
    if(error)throw error
-   const products=await Promise.all((data||[]).map(async p=>{const {count}=await db.from('voucher_inventory').select('id',{count:'exact',head:true}).eq('product_id',p.id).eq('status','available').or('expiry_date.is.null,expiry_date.gte.'+new Date().toISOString().slice(0,10));return {...p,available_stock:count||0}}))
-   return reply(res,200,{products})
+   return reply(res,200,{products:data||[]})
   }
   if(req.method==='POST'){
    const {name,brand,category,denomination,selling_price,description,image_url}=req.body||{}
