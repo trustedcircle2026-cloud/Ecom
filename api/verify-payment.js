@@ -17,7 +17,10 @@ export default async function handler(req,res) {
     if(a.length!==b.length||!crypto.timingSafeEqual(a,b)) return json(res,400,{error:'Payment signature verification failed'})
     const {error:paymentError}=await supabase.from('payments').update({provider_payment_id:razorpay_payment_id,status:'captured',signature_verified:true}).eq('provider_order_id',razorpay_order_id)
     if(paymentError) return json(res,500,{error:'Could not record payment'})
-    await supabase.from('orders').update({status:'paid',paid_at:new Date().toISOString()}).eq('id',order.id).in('status',['pending_payment','paid'])
-    return json(res,200,{verified:true,orderNumber:order.id,status:'paid',message:'Payment verified. Voucher fulfilment will be shown in your orders.'})
+    const {error:orderUpdateError}=await supabase.from('orders').update({status:'paid',paid_at:new Date().toISOString()}).eq('id',order.id).in('status',['pending_payment','paid'])
+    if(orderUpdateError) return json(res,500,{error:'Payment verified but order update is pending'})
+    const {error:fulfilError}=await supabase.rpc('fulfil_paid_order',{p_order_id:order.id})
+    if(fulfilError) console.error('Voucher fulfilment pending for order',order.id,fulfilError)
+    return json(res,200,{verified:true,orderNumber:order.id,status:fulfilError?'paid':'fulfilled',message:fulfilError?'Payment verified. Voucher fulfilment is pending inventory review.':'Payment verified and vouchers allocated.'})
   } catch(e) { console.error('verify-payment failed',e); return json(res,500,{error:'Unable to verify payment'}) }
 }
