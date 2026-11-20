@@ -39,8 +39,9 @@ export default async function handler(req, res) {
     const rp = await fetch('https://api.razorpay.com/v1/orders',{method:'POST',headers:{Authorization:'Basic '+credentials,'Content-Type':'application/json'},body:JSON.stringify({amount:Math.round(subtotal*100),currency:'INR',receipt:orderNumber,notes:{internal_order_id:order.id,user_id:user.id}})})
     const paymentOrder = await rp.json()
     if (!rp.ok) { const {data:orderItems}=await supabase.from('order_items').select('id').eq('order_id',order.id); await supabase.from('voucher_inventory').update({status:'available',order_item_id:null,reserved_until:null}).eq('status','reserved').in('order_item_id',(orderItems||[]).map(x=>x.id)); await supabase.from('orders').update({status:'payment_failed'}).eq('id',order.id); return json(res,502,{error:'Payment provider could not create the order'}) }
-    await supabase.from('orders').update({razorpay_order_id:paymentOrder.id}).eq('id',order.id)
-    await supabase.from('payments').insert({order_id:order.id,provider_order_id:paymentOrder.id,amount:subtotal,currency:'INR',status:'created'})
+    const {error:saveOrderError}=await supabase.from('orders').update({razorpay_order_id:paymentOrder.id}).eq('id',order.id)
+    const {error:savePaymentError}=await supabase.from('payments').insert({order_id:order.id,provider_order_id:paymentOrder.id,amount:subtotal,currency:'INR',status:'created'})
+    if(saveOrderError||savePaymentError){const {data:orderItems}=await supabase.from('order_items').select('id').eq('order_id',order.id);await supabase.from('voucher_inventory').update({status:'available',order_item_id:null,reserved_until:null}).eq('status','reserved').in('order_item_id',(orderItems||[]).map(x=>x.id));await supabase.from('orders').update({status:'payment_failed'}).eq('id',order.id);return json(res,500,{error:'Could not save payment order details'})}
     return json(res,200,{orderId:order.id,orderNumber,razorpayOrderId:paymentOrder.id,amount:paymentOrder.amount,currency:paymentOrder.currency,keyId:process.env.RAZORPAY_KEY_ID})
   } catch (e) { console.error('create-order failed',e); return json(res,500,{error:'Unable to start checkout'}) }
 }
