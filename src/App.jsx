@@ -64,6 +64,7 @@ function App() {
 
   useEffect(() => {
     if (!session?.user) { setCartHydrated(false); return }
+    setCartHydrated(false)
     let active=true
     fetch('/api/cart',{headers:{Authorization:'Bearer '+session.access_token}}).then(r=>r.json()).then(d=>{
       if(active){setCart((d.items||[]).map(p=>({...p,color:brands.find(b=>b.name===p.brand)?.color||'#244d40'})));setCartHydrated(true)}
