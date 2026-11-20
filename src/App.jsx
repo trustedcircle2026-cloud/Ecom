@@ -25,6 +25,7 @@ function App() {
   const [profile, setProfile] = useState(null)
   const [products, setProducts] = useState(starterProducts)
   const [cart, setCart] = useState(() => JSON.parse(localStorage.getItem('tc-cart') || '[]'))
+  const [cartHydrated, setCartHydrated] = useState(false)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState('All')
   const [cartOpen, setCartOpen] = useState(false)
@@ -38,7 +39,8 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('tc-cart', JSON.stringify(cart))
-  }, [cart])
+    if (session?.user && cartHydrated) fetch('/api/cart',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.access_token},body:JSON.stringify({items:cart.map(x=>({id:x.id,qty:x.qty}))})}).catch(()=>{})
+  }, [cart,session,cartHydrated])
 
   useEffect(() => {
     if (!supabase) return
@@ -58,6 +60,15 @@ function App() {
     if (!session?.user) { setProfile(null); setIsAdmin(false); return }
     setProfile({ name: session.user.user_metadata?.full_name || session.user.email, email: session.user.email, avatar: session.user.user_metadata?.avatar_url })
     fetch('/api/admin-status',{headers:{Authorization:'Bearer '+session.access_token}}).then(r=>r.json()).then(d=>setIsAdmin(Boolean(d.isAdmin))).catch(()=>setIsAdmin(false))
+  }, [session])
+
+  useEffect(() => {
+    if (!session?.user) { setCartHydrated(false); return }
+    let active=true
+    fetch('/api/cart',{headers:{Authorization:'Bearer '+session.access_token}}).then(r=>r.json()).then(d=>{
+      if(active){setCart((d.items||[]).map(p=>({...p,color:brands.find(b=>b.name===p.brand)?.color||'#244d40'})));setCartHydrated(true)}
+    }).catch(()=>{if(active)setCartHydrated(true)})
+    return ()=>{active=false}
   }, [session])
 
   const categories = ['All', 'Shopping', 'Fashion', 'Food & dining', 'Electronics']
