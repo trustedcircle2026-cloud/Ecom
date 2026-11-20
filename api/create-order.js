@@ -33,10 +33,12 @@ export default async function handler(req, res) {
     if (orderError) return json(res,500,{error:'Could not create order'})
     const { error: lineError } = await supabase.from('order_items').insert(lines.map(x=>({...x,order_id:order.id})))
     if (lineError) { await supabase.from('orders').delete().eq('id',order.id); return json(res,500,{error:'Could not create order items'}) }
+    const {error:reservationError}=await supabase.rpc('reserve_order_vouchers',{p_order_id:order.id})
+    if(reservationError){await supabase.from('orders').delete().eq('id',order.id);return json(res,409,{error:'Voucher stock could not be reserved. Please refresh your cart.'})}
     const credentials = Buffer.from(process.env.RAZORPAY_KEY_ID + ':' + process.env.RAZORPAY_KEY_SECRET).toString('base64')
     const rp = await fetch('https://api.razorpay.com/v1/orders',{method:'POST',headers:{Authorization:'Basic '+credentials,'Content-Type':'application/json'},body:JSON.stringify({amount:Math.round(subtotal*100),currency:'INR',receipt:orderNumber,notes:{internal_order_id:order.id,user_id:user.id}})})
     const paymentOrder = await rp.json()
-    if (!rp.ok) { await supabase.from('orders').update({status:'payment_failed'}).eq('id',order.id); return json(res,502,{error:'Payment provider could not create the order'}) }
+    if (!rp.ok) { await supabase.from('voucher_inventory').update({status:'available',order_item_id:null,reserved_until:null}).eq('status','reserved').in('order_item_id',lines.map((_,i)=>null)); await supabase.from('orders').update({status:'payment_failed'}).eq('id',order.id); return json(res,502,{error:'Payment provider could not create the order'}) }
     await supabase.from('orders').update({razorpay_order_id:paymentOrder.id}).eq('id',order.id)
     await supabase.from('payments').insert({order_id:order.id,provider_order_id:paymentOrder.id,amount:subtotal,currency:'INR',status:'created'})
     return json(res,200,{orderId:order.id,orderNumber,razorpayOrderId:paymentOrder.id,amount:paymentOrder.amount,currency:paymentOrder.currency,keyId:process.env.RAZORPAY_KEY_ID})
