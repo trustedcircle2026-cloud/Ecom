@@ -48,12 +48,16 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!session?.user) { setProfile(null); setIsAdmin(false); return }
-    fetch('/api/admin-status',{headers:{Authorization:'Bearer '+session.access_token}}).then(r=>r.json()).then(d=>setIsAdmin(Boolean(d.isAdmin))).catch(()=>setIsAdmin(false))
-    setProfile({ name: session.user.user_metadata?.full_name || session.user.email, email: session.user.email, avatar: session.user.user_metadata?.avatar_url })
-    if (supabase) supabase.from('products').select('id,name,brand,category,denomination,selling_price,is_active').eq('is_active', true).then(({ data, error }) => {
+    if (!supabase) return
+    supabase.from('products').select('id,name,brand,category,denomination,selling_price,is_active').eq('is_active', true).then(({ data, error }) => {
       if (!error && data?.length) setProducts(data.map(p => ({ id:p.id, brand:p.brand, category:p.category, amount:p.denomination, price:p.selling_price, title:p.name, color: brands.find(b=>b.name===p.brand)?.color || '#244d40' })))
     })
+  }, [])
+
+  useEffect(() => {
+    if (!session?.user) { setProfile(null); setIsAdmin(false); return }
+    setProfile({ name: session.user.user_metadata?.full_name || session.user.email, email: session.user.email, avatar: session.user.user_metadata?.avatar_url })
+    fetch('/api/admin-status',{headers:{Authorization:'Bearer '+session.access_token}}).then(r=>r.json()).then(d=>setIsAdmin(Boolean(d.isAdmin))).catch(()=>setIsAdmin(false))
   }, [session])
 
   const categories = ['All', 'Shopping', 'Fashion', 'Food & dining', 'Electronics']
