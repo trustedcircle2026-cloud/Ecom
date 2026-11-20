@@ -8,7 +8,7 @@ export default async function handler(req,res){
   const {data:order,error}=await db.from('orders').select('id,order_number,status,order_items(id,product_name,brand,denomination,quantity)').eq('id',orderId).eq('user_id',user.id).maybeSingle()
   if(error)throw error
   if(!order)return reply(res,404,{error:'Order not found'})
-  if(!['fulfilled','paid','processing'].includes(order.status))return reply(res,409,{error:'Voucher details are not available until payment and fulfilment are complete'})
+  if(order.status!=='fulfilled')return reply(res,409,{error:'Voucher details are not available until payment and fulfilment are complete'})
   const ids=(order.order_items||[]).map(x=>x.id)
   const {data:inventory,error:inventoryError}=await db.from('voucher_inventory').select('id,order_item_id,code_ciphertext,pin_ciphertext,expiry_date,status').in('order_item_id',ids).eq('status','delivered')
   if(inventoryError)throw inventoryError
