@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       const product = products.find(p => p.id === item.productId)
       const qty = Number(item.quantity)
       if (!product || !Number.isInteger(qty) || qty < 1 || qty > 10) return json(res,400,{error:'Invalid cart quantity'})
-      const { count } = await supabase.from('voucher_inventory').select('id',{count:'exact',head:true}).eq('product_id',product.id).eq('status','available')
+      const { count } = await supabase.from('voucher_inventory').select('id',{count:'exact',head:true}).eq('product_id',product.id).eq('status','available').or('expiry_date.is.null,expiry_date.gte.'+new Date().toISOString().slice(0,10))
       if ((count || 0) < qty) return json(res,409,{error:product.brand + ' voucher is currently out of stock'})
       subtotal += Number(product.selling_price) * qty
       lines.push({ product_id:product.id, product_name:product.name, brand:product.brand, denomination:product.denomination, quantity:qty, unit_price:product.selling_price })
