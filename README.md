@@ -1,41 +1,55 @@
 # Trusted Circle — Digital Gift Cards
 
-A digital gift-card storefront built with React + Vite, Supabase Auth/Postgres, Vercel serverless functions and Razorpay. Voucher sourcing is manual; customers pay online and the administrator fulfils paid orders manually.
+React + Vite storefront with Supabase Auth/Postgres, Netlify Functions and Razorpay Checkout. Gift-card products have unlimited catalogue availability. The administrator manually enters the real voucher code after payment.
 
-## Implemented
+## Customer and admin workflow
 
-- Responsive customer storefront and brand/category filtering.
-- Live product catalogue and server-calculated checkout prices.
-- Google sign-in and sign-out through Supabase Auth.
-- Persistent customer cart, order history and voucher reveal after fulfilment.
-- Single-admin workspace for products, voucher inventory, orders and customers.
-- Unlimited catalogue availability: checkout does not depend on uploaded voucher inventory.
-- Razorpay payment verification and webhook confirmation.
-- Orders become **Paid** only after successful payment verification.
-- Admin manually assigns uploaded voucher codes to paid orders; customer can view them after the order becomes **Fulfilled**.
-- Voucher codes and PINs are stored as plaintext in Supabase.
+- Customers browse active products, sign in with Google, add items to their bag and pay through Razorpay.
+- Checkout does not check or reserve voucher stock. Active products can be ordered regardless of code availability.
+- Razorpay's signed `payment.captured` webhook is the source of truth for the **Paid** order status. The browser payment callback does not mark an order paid.
+- Paid orders appear in Admin → Orders as awaiting fulfilment.
+- Admin enters one real voucher code per ordered quantity. Each line format is `code,pin,expiry-date`; PIN and expiry are optional.
+- After Admin selects **Save codes & mark fulfilled**, the customer can view the code(s) under Account → My orders.
+- Voucher codes are stored as plaintext in Supabase. There is no voucher encryption key and no stock upload requirement.
 
-## Important security note
+## Deploy to Netlify
 
-Plaintext voucher storage is less secure. Anyone with privileged database access may be able to read unused voucher codes and PINs. Restrict Supabase dashboard access, keep the service-role key server-side, use a strong administrator account, and never expose inventory through public APIs. The admin-only server endpoints are the only intended inventory management path.
+Netlify settings are included in `netlify.toml`.
 
-## Local development
+- Build command: `npm run build`
+- Publish directory: `dist`
+- Functions directory: `netlify/functions`
+- Node: 20 (also specified in `.nvmrc`)
 
-1. Use Node.js 20+.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env.local`.
-4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-5. Run `npm run dev`. Use Vercel CLI with server-only variables to test API routes.
+The `netlify/functions/api.js` adapter routes the existing `/api/*` endpoints to Netlify Functions. This includes checkout, authenticated account/admin endpoints and the Razorpay webhook.
+
+## Environment variables
+
+Add these in Netlify → Site configuration → Environment variables:
+
+| Variable | Purpose |
+|---|---|
+| `VITE_SUPABASE_URL` | Supabase project URL used by the browser |
+| `VITE_SUPABASE_ANON_KEY` | Supabase publishable/anon key used by the browser |
+| `SUPABASE_URL` | Supabase project URL for server functions |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only Supabase service-role key |
+| `RAZORPAY_KEY_ID` | Razorpay Checkout key ID |
+| `RAZORPAY_KEY_SECRET` | Server-only Razorpay key secret |
+| `RAZORPAY_WEBHOOK_SECRET` | Secret configured on the Razorpay webhook |
+| `RESEND_API_KEY` | Optional; email delivery is not implemented |
+| `RESEND_FROM_EMAIL` | Optional; email delivery is not implemented |
+
+Do not add `VOUCHER_ENCRYPTION_KEY`. Do not prefix server-only secrets with `VITE_`. Redeploy after changing environment variables.
 
 ## Supabase setup
 
-1. Run `supabase/schema.sql` in SQL Editor for a new database.
-2. Run `supabase/fulfilment.sql` after the schema.
-3. Enable Google under Authentication → Providers and configure the Google OAuth client ID and secret.
-4. Add the Supabase callback URL to Google Cloud OAuth authorized redirect URIs.
-5. Add the deployed Vercel URL to Supabase Authentication → URL Configuration.
-6. Sign in once using the intended administrator Google account.
-7. Add that account to the single-admin allowlist:
+For a new Supabase database:
+1. Run `supabase/schema.sql` in the Supabase SQL Editor.
+2. Enable Google in Authentication → Providers and configure the Google OAuth client ID and secret.
+3. Add the Supabase callback URL to Google Cloud OAuth authorized redirect URIs.
+4. Add your Netlify site URL to Supabase Authentication → URL Configuration.
+5. Sign in once using the Google account that should administer the shop.
+6. Add that account to the admin allowlist:
 
 ```sql
 insert into public.admin_users(user_id)
@@ -43,59 +57,33 @@ select id from auth.users where email = 'YOUR_ADMIN_GOOGLE_EMAIL'
 on conflict (user_id) do nothing;
 ```
 
-If you are upgrading an existing database that previously used encrypted voucher columns, run the updated `supabase/fulfilment.sql` to rename the columns for plaintext storage. Previously encrypted voucher values are not automatically decrypted by this change; re-upload any such stock from the original source if necessary.
+For an existing database created from the earlier project version, run `supabase/manual-fulfilment.sql` once to create the new manual voucher delivery table. Do not run the old stock reservation/fulfilment workflow for this new process.
 
-## Vercel environment variables
+## Razorpay webhook setup
 
-Set these in Vercel → Project → Settings → Environment Variables:
+1. In Razorpay Dashboard → Account & Settings → Webhooks, add:
+   `https://YOUR-NETLIFY-SITE/api/razorpay-webhook`
+2. Create a webhook secret and copy the exact same value into Netlify as `RAZORPAY_WEBHOOK_SECRET`.
+3. Subscribe to `payment.captured` and `payment.failed`.
+4. Use Razorpay Test Mode keys for testing before switching to live credentials.
 
-| Variable | Scope |
-|---|---|
-| `VITE_SUPABASE_URL` | Frontend |
-| `VITE_SUPABASE_ANON_KEY` | Frontend |
-| `SUPABASE_URL` | Server only |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only |
-| `RAZORPAY_KEY_ID` | Server only |
-| `RAZORPAY_KEY_SECRET` | Server only |
-| `RAZORPAY_WEBHOOK_SECRET` | Server only |
-| `RESEND_API_KEY` | Optional |
-| `RESEND_FROM_EMAIL` | Optional |
+Razorpay Key ID and Key Secret are still required to create a Razorpay checkout order. The webhook secret is separate and is only used to verify webhook messages.
 
-**Remove `VOUCHER_ENCRYPTION_KEY` from Vercel. It is no longer used.** Keep Supabase service-role and Razorpay secrets server-only; never use a `VITE_` prefix for them.
+## Security notes
 
-## Razorpay setup
+- Keep `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` server-side in Netlify.
+- Never expose these secrets in browser code, screenshots, public repositories or variables prefixed with `VITE_`.
+- Plaintext voucher codes are visible to privileged database administrators. Restrict Supabase project access and use the admin-only API to enter codes.
+- Only the customer who owns an order can retrieve its voucher codes.
 
-1. Add Razorpay Key ID and Key Secret to Vercel.
-2. Configure webhook URL: `https://YOUR_DOMAIN/api/razorpay-webhook`.
-3. Set the matching webhook secret as `RAZORPAY_WEBHOOK_SECRET`.
-4. Subscribe to `payment.captured` and `payment.failed`.
-5. Test using Razorpay test mode before enabling live payments.
+## Test checklist
 
-## Admin workflow
+1. Confirm Google login and admin access.
+2. Create an active product and verify that it can be added to the bag with no voucher inventory.
+3. Complete a Razorpay test payment.
+4. Confirm the Razorpay webhook changes the order to **Paid**.
+5. Enter the voucher code(s) in Admin → Orders and mark the order fulfilled.
+6. Sign in as the customer and confirm the voucher is visible in My Orders only after fulfilment.
+7. Test `payment.failed` and verify the order is not marked Paid.
 
-1. Sign in using the Google account in `admin_users`.
-2. Open Admin workspace and create/activate products.
-3. Open Voucher stock and upload one voucher per line as `code,pin,YYYY-MM-DD`. PIN and expiry are optional.
-4. Monitor Orders. A successful payment changes the order to **Paid**.
-5. Upload the corresponding genuine voucher code(s), then click **Fulfil paid order manually** on that order.
-6. The system assigns available uploaded voucher records to the order and marks it **Fulfilled** only when every ordered quantity has a voucher.
-7. The customer can then open Account → My orders → View voucher details.
-
-An order can be placed even when no voucher code is currently uploaded. Payment success confirms the order but does not automatically deliver a voucher. The admin must fulfil it after payment.
-
-## Customer workflow
-
-1. Browse products and add them to the bag.
-2. Sign in with Google and complete Razorpay checkout.
-3. After successful payment, the order appears as **Paid**.
-4. Wait for the administrator to assign the voucher.
-5. Open Account → My orders to view voucher details once the order is **Fulfilled**.
-
-## Deployment checklist
-
-- Apply SQL scripts in order.
-- Confirm the administrator account is allowlisted.
-- Configure Supabase OAuth and all Vercel environment variables.
-- Configure Razorpay webhook and verify test events.
-- Test payment success, payment failure, order marked Paid, manual voucher upload, manual fulfilment, and customer voucher reveal.
-- Email delivery is not enabled; the customer order page is the current delivery channel.
+Email delivery is not currently enabled; the customer account's My Orders page is the digital delivery channel.
