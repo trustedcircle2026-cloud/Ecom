@@ -1,62 +1,119 @@
 # Trusted Circle — Digital Gift Cards
 
-A React + Vite storefront foundation for branded digital gift cards. Supabase is the system of record; Vercel hosts the frontend and secure serverless checkout endpoints; Razorpay handles payments.
+A digital gift-card storefront built with React + Vite, Supabase Auth/Postgres, Vercel serverless functions and Razorpay. Voucher sourcing is manual; voucher delivery is digital.
 
-## Included in this first implementation
-- Responsive storefront, brand/category browsing, denominations and search.
-- Local cart with quantity controls and totals.
-- Supabase Google OAuth sign-in/sign-out wiring.
-- Supabase schema for profiles, brands, products, manual voucher inventory, carts, orders, order items, payments, webhook idempotency and one-admin roles.
-- RLS baseline: voucher codes are never readable by customers; order/payment writes are server-only.
-- Seeded initial brands: Amazon, Flipkart, Myntra, Swiggy, Zomato, Tata CLiQ, Croma and Other brands.
+## Implemented
+
+- Responsive customer storefront and brand/category filtering.
+- Initial brands: Amazon, Flipkart, Myntra, Swiggy, Zomato, Tata CLiQ, Croma and Other brands.
+- Live product catalogue from Supabase; product prices are read again by the server during checkout.
+- Local shopping cart with quantity controls.
+- Google sign-in and sign-out through Supabase Auth.
+- Single-admin access based on the `admin_users` table, never a browser-supplied email flag.
+- Admin workspace: product creation, activation/deactivation, order list, and secure bulk voucher upload.
+- Voucher code/PIN encryption using AES-256-GCM before storage.
+- Server-side Razorpay order creation and payment signature verification.
+- Razorpay webhook signature verification with event IDs and retry-safe order processing.
+- Atomic voucher allocation using PostgreSQL row locks and `SKIP LOCKED`.
+- Customer order history and voucher reveal only after the order is fulfilled.
+- Admin retry for paid orders waiting for voucher inventory.
 
 ## Local development
-1. Install Node.js 20+.
-2. Run `npm install`.
-3. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-4. Run `npm run dev`.
 
-The storefront can be previewed without Supabase, but Google authentication requires the environment variables and provider configuration.
+1. Use Node.js 20+.
+2. Run `npm install`.
+3. Copy `.env.example` to `.env.local`.
+4. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the storefront.
+5. Run `npm run dev`.
+
+The serverless API routes run on Vercel. For local API testing, use the Vercel CLI (`vercel dev`) with the server-only environment variables configured.
 
 ## Supabase setup
-1. Create/use your Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL Editor.
-3. In Authentication → Providers, enable Google and enter the Google OAuth client ID/secret.
-4. Add the Supabase callback URL shown in the provider settings to the Google Cloud OAuth authorized redirect URIs.
-5. In Authentication → URL Configuration, add your Vercel production URL and local development URL to the allowed redirect URLs.
-6. Sign in once with the intended administrator Google account. Copy that user's UUID from Authentication → Users and run:
-   `insert into public.admin_users(user_id) values ('USER_UUID');`
-7. Keep the Supabase service-role key server-side only.
+
+1. Open the existing Supabase project and run `supabase/schema.sql` in SQL Editor (initial schema).
+2. Then run `supabase/fulfilment.sql` (indexes and atomic voucher fulfilment function).
+3. Enable Google in Authentication → Providers and configure the Google OAuth client ID/secret.
+4. Add the Supabase callback URL to Google Cloud OAuth authorized redirect URIs.
+5. Add the Vercel production URL and local URL to Supabase Authentication → URL Configuration.
+6. Sign in once with the intended administrator Google account.
+7. In SQL Editor, grant the single administrator role:
+
+```sql
+insert into public.admin_users(user_id)
+select id from auth.users where email = 'YOUR_ADMIN_GOOGLE_EMAIL'
+on conflict (user_id) do nothing;
+```
+
+Only this allowlisted user can open the admin workspace and manage catalogue/inventory.
 
 ## Vercel environment variables
-Frontend:
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
 
-Server-only (for the checkout functions to be added in the payment milestone):
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `RAZORPAY_KEY_ID`
-- `RAZORPAY_KEY_SECRET`
-- `RAZORPAY_WEBHOOK_SECRET`
-- `ADMIN_EMAIL`
+Set these in Vercel → Project → Settings → Environment Variables:
 
-Never prefix private secrets with `VITE_`. Never commit secrets to GitHub.
+| Variable | Scope |
+|---|---|
+| `VITE_SUPABASE_URL` | Frontend |
+| `VITE_SUPABASE_ANON_KEY` | Frontend |
+| `SUPABASE_URL` | Server only |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server only |
+| `RAZORPAY_KEY_ID` | Server only |
+| `RAZORPAY_KEY_SECRET` | Server only |
+| `RAZORPAY_WEBHOOK_SECRET` | Server only |
+| `VOUCHER_ENCRYPTION_KEY` | Server only |
+| `RESEND_API_KEY` | Optional email provider |
+| `RESEND_FROM_EMAIL` | Optional verified sender |
 
-## Payment and fulfilment release gate
-The storefront intentionally does **not** pretend to take live payments yet. Before production checkout, implement Vercel server endpoints to:
-1. Re-read product prices and available voucher stock on the server; never trust browser totals.
-2. Create a pending order and Razorpay order using server-only credentials.
-3. Verify Razorpay payment signatures server-side.
-4. Verify webhook signatures against the raw request body and persist event IDs for idempotency.
-5. Atomically allocate one available manual voucher per paid order item, mark it delivered, and expose voucher details only to the owning customer after fulfilment.
-6. Send the voucher email through a configured transactional email provider and retain a secure order-history view.
-7. Handle payment failures, refunds, stock races and duplicate webhook events.
+Generate an encryption key locally with:
 
-Manual inventory means the administrator must upload genuine voucher codes and PINs obtained from authorized sources. Store encrypted voucher secrets, not plaintext. Use a server-side encryption key (for example, AES-256-GCM) stored only in Vercel environment variables; the schema's `code_ciphertext` and `pin_ciphertext` columns are intended for encrypted values.
+```bash
+openssl rand -hex 32
+```
+
+Use the same key for every deployment environment that needs to decrypt existing vouchers. Losing or changing it without a controlled key rotation will make previously stored vouchers unreadable. Never commit secrets or expose service-role/payment secrets through `VITE_` variables.
+
+## Razorpay setup
+
+1. Configure the Razorpay Key ID and Key Secret in Vercel.
+2. Add a Razorpay webhook pointing to `https://YOUR_DOMAIN/api/razorpay-webhook`.
+3. Use the same webhook secret in `RAZORPAY_WEBHOOK_SECRET`.
+4. Subscribe to `payment.captured` and `payment.failed`.
+5. Test with Razorpay test mode before enabling live keys.
+
+## Admin workflow
+
+1. Sign in using the Google account allowlisted in `admin_users`.
+2. Open Account → Admin workspace.
+3. Create a product with brand, denomination, category and selling price.
+4. Open Voucher stock and select the product.
+5. Paste one voucher per line as `code,pin,YYYY-MM-DD` (PIN and expiry are optional).
+6. The server encrypts voucher code and PIN with AES-256-GCM before saving.
+7. Monitor orders. Paid orders are allocated from available stock using a database function. If stock is unavailable, upload stock and use Retry voucher fulfilment.
+
+Upload only vouchers obtained from authorized sources. Treat source spreadsheets and raw voucher codes as highly sensitive.
+
+## Customer workflow
+
+1. Browse live gift cards and add products to the cart.
+2. Sign in with Google.
+3. Complete Razorpay checkout.
+4. The server verifies the payment signature.
+5. Voucher allocation is performed by the database function.
+6. The customer opens Account → My orders → View voucher details after fulfilment.
 
 ## Deployment
-Import this GitHub repository into Vercel, select the Vite framework preset and deploy. Set environment variables in Vercel, then redeploy. Connect the Supabase project and configure OAuth redirect URLs to match the deployed domain.
 
-## Current status
-This is the initial storefront + auth/schema foundation. Live Razorpay checkout, encrypted voucher upload, transactional email, order fulfilment and admin CRUD screens are the next implementation milestone; do not accept real customer payments until those server-side controls are deployed and tested.
+1. Import this repository into Vercel using the Vite preset.
+2. Configure all environment variables above.
+3. Deploy and configure Supabase OAuth URLs and Razorpay webhook URL for the deployed domain.
+4. Apply both SQL files in order.
+5. Test a complete order in Razorpay test mode with a real test voucher before accepting customer payments.
+
+## Production launch checks
+
+- The project must be built and tested in the connected Vercel environment.
+- Confirm that the Supabase schema and fulfilment SQL have both been applied.
+- Confirm that the intended Google account exists in `admin_users`.
+- Confirm that Vercel has all server-only secrets, especially the encryption key.
+- Confirm webhook delivery and duplicate-event handling.
+- Test insufficient stock, payment failure, successful payment, order history, voucher reveal and admin retry.
+- Email delivery is not yet enabled; the customer order page is the current digital delivery channel. A verified transactional email provider can be configured as a separate release task.
