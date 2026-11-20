@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, ArrowUpRight, Check, ChevronDown, Gift, Heart, Menu, Search, ShoppingBag, ShieldCheck, Sparkles, UserRound, X, LogOut, LayoutDashboard, Package, Plus, Minus, Trash2 } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from './lib/supabase'
+import AdminDashboard from './AdminDashboard.jsx'
+import MyOrders from './MyOrders.jsx'
 
 const brands = [
   { name: 'Amazon', category: 'Shopping', color: '#f5a623', mark: 'a' },
@@ -31,6 +33,8 @@ function App() {
   const [notice, setNotice] = useState('')
   const [loading, setLoading] = useState(false)
   const [adminMode, setAdminMode] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [ordersOpen, setOrdersOpen] = useState(false)
 
   useEffect(() => {
     localStorage.setItem('tc-cart', JSON.stringify(cart))
@@ -44,7 +48,8 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (!session?.user) { setProfile(null); return }
+    if (!session?.user) { setProfile(null); setIsAdmin(false); return }
+    fetch('/api/admin-status',{headers:{Authorization:'Bearer '+session.access_token}}).then(r=>r.json()).then(d=>setIsAdmin(Boolean(d.isAdmin))).catch(()=>setIsAdmin(false))
     setProfile({ name: session.user.user_metadata?.full_name || session.user.email, email: session.user.email, avatar: session.user.user_metadata?.avatar_url })
     if (supabase) supabase.from('products').select('id,name,brand,category,denomination,selling_price,is_active').eq('is_active', true).then(({ data, error }) => {
       if (!error && data?.length) setProducts(data.map(p => ({ id:p.id, brand:p.brand, category:p.category, amount:p.denomination, price:p.selling_price, title:p.name, color: brands.find(b=>b.name===p.brand)?.color || '#244d40' })))
@@ -94,7 +99,6 @@ function App() {
     } catch(e) { setNotice(e.message || 'Unable to start checkout') }
     finally { setLoading(false) }
   }
-  const isAdmin = session?.user?.email && session.user.email === import.meta.env.VITE_ADMIN_EMAIL
 
   return <div className="app">
     <div className="announcement"><Sparkles size={13}/> A little joy, delivered instantly <span>•</span> Digital gift cards, made easy</div>
@@ -121,8 +125,9 @@ function App() {
     <footer><a className="logo footer-logo" href="#"><span className="logo-icon"><Gift size={19}/></span><span>trusted<span className="logo-light">circle</span><small>GIFTS THAT FEEL RIGHT</small></span></a><span>© {new Date().getFullYear()} Trusted Circle. Made for the moments that matter.</span><div><a href="#shop">Shop</a><a href="#how">How it works</a></div></footer>
     {notice&&<div className="toast" role="status">{notice}<button onClick={()=>setNotice('')}><X size={15}/></button></div>}
     {cartOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setCartOpen(false)}><aside className="drawer"><div className="drawer-head"><div><span className="eyebrow">YOUR SELECTION</span><h2>Your bag <small>({count})</small></h2></div><button className="icon-btn" onClick={()=>setCartOpen(false)}><X/></button></div>{cart.length?<><div className="cart-lines">{cart.map(item=><div className="cart-line" key={item.id}><div className="mini-card" style={{'--brand':item.color}}><Gift/></div><div className="cart-detail"><b>{item.brand} Gift Card</b><span>{money(item.amount)}</span><div className="qty"><button onClick={()=>changeQty(item.id,-1)}><Minus size={13}/></button>{item.qty}<button onClick={()=>changeQty(item.id,1)}><Plus size={13}/></button><button className="remove" onClick={()=>setCart(old=>old.filter(x=>x.id!==item.id))}><Trash2 size={13}/></button></div></div><b>{money(item.price*item.qty)}</b></div>)}</div><div className="cart-summary"><div><span>Subtotal</span><b>{money(total)}</b></div><div><span>Delivery</span><b>Free</b></div><div className="grand-total"><span>Total</span><b>{money(total)}</b></div><button className="primary-btn checkout-btn" onClick={checkout} disabled={loading}>{loading ? "Preparing checkout..." : "Continue to checkout"} <ArrowRight size={17}/></button><p><ShieldCheck size={14}/> Secure payment · Digital delivery</p></div></>:<div className="empty-cart"><ShoppingBag size={38}/><h3>Your bag is waiting</h3><p>Add a gift card to get started.</p><button className="primary-btn" onClick={()=>setCartOpen(false)}>Explore gifts</button></div>}</aside></div>}
-    {accountOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setAccountOpen(false)}><aside className="account-modal"><button className="icon-btn modal-close" onClick={()=>setAccountOpen(false)}><X/></button><span className="logo-icon"><UserRound/></span><h2>{session?'Welcome back':'A little account, a lot of convenience.'}</h2><p>{session?'You are signed in to Trusted Circle.':'Sign in to save your bag, view your orders and keep your gifts together.'}</p>{session?<><div className="profile-row">{profile?.avatar&&<img src={profile.avatar} alt=""/>}<div><b>{profile?.name}</b><span>{profile?.email}</span></div></div><button className="primary-btn full-btn" onClick={()=>{setAccountOpen(false);setAdminOpen(true)}}>My account <ArrowRight size={16}/></button><button className="secondary-btn full-btn" onClick={signOut}><LogOut size={16}/> Sign out</button></>:<button className="google-btn" onClick={signIn} disabled={loading}><span>G</span>{loading?'Connecting...':'Continue with Google'}<ArrowRight size={16}/></button>}<small className="modal-note">By continuing, you agree to our Terms and Privacy Policy.</small></aside></div>}
-    {adminOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setAdminOpen(false)}><aside className="drawer admin-drawer"><div className="drawer-head"><div><span className="eyebrow">ACCOUNT</span><h2>My account</h2></div><button className="icon-btn" onClick={()=>setAdminOpen(false)}><X/></button></div><div className="admin-welcome"><LayoutDashboard/><div><b>{profile?.name}</b><span>{profile?.email}</span></div></div><div className="account-links"><button><Package/> My orders <ArrowRight/></button><button><UserRound/> Profile details <ArrowRight/></button></div><p className="muted">Order history and voucher delivery will appear here after the order service is configured.</p></aside></div>}
+    {accountOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setAccountOpen(false)}><aside className="account-modal"><button className="icon-btn modal-close" onClick={()=>setAccountOpen(false)}><X/></button><span className="logo-icon"><UserRound/></span><h2>{session?'Welcome back':'A little account, a lot of convenience.'}</h2><p>{session?'You are signed in to Trusted Circle.':'Sign in to save your bag, view your orders and keep your gifts together.'}</p>{session?<><div className="profile-row">{profile?.avatar&&<img src={profile.avatar} alt=""/>}<div><b>{profile?.name}</b><span>{profile?.email}</span></div></div><button className="primary-btn full-btn" onClick={()=>{setAccountOpen(false);setAdminOpen(true)}}>{isAdmin?'Admin workspace':'My account'} <ArrowRight size={16}/></button><button className="secondary-btn full-btn" onClick={signOut}><LogOut size={16}/> Sign out</button></>:<button className="google-btn" onClick={signIn} disabled={loading}><span>G</span>{loading?'Connecting...':'Continue with Google'}<ArrowRight size={16}/></button>}<small className="modal-note">By continuing, you agree to our Terms and Privacy Policy.</small></aside></div>}
+    {adminOpen&&isAdmin?<AdminDashboard session={session} onClose={()=>setAdminOpen(false)}/>:adminOpen&&<div className="overlay" onMouseDown={e=>e.target===e.currentTarget&&setAdminOpen(false)}><aside className="drawer admin-drawer"><div className="drawer-head"><div><span className="eyebrow">ACCOUNT</span><h2>My account</h2></div><button className="icon-btn" onClick={()=>setAdminOpen(false)}><X/></button></div><div className="admin-welcome"><LayoutDashboard/><div><b>{profile?.name}</b><span>{profile?.email}</span></div></div><div className="account-links"><button onClick={()=>setOrdersOpen(true)}><Package/> My orders <ArrowRight/></button><button onClick={()=>setNotice('Your profile is managed securely through your Google account.')}><UserRound/> Profile details <ArrowRight/></button></div><p className="muted">Order history and voucher delivery will appear here after the order service is configured.</p></aside></div>}
+    {ordersOpen&&session&&<MyOrders session={session} onClose={()=>setOrdersOpen(false)}/>}
   </div>
 }
 export default App
