@@ -13,6 +13,8 @@ declare
   v_order public.orders%rowtype;
   v_item record;
   v_allocated integer;
+  v_before integer;
+  v_after integer;
   v_total integer:=0;
 begin
   select * into v_order from public.orders where id=p_order_id for update;
@@ -23,6 +25,7 @@ begin
   for v_item in select * from public.order_items where order_id=p_order_id order by created_at for update loop
     select count(*) into v_allocated from public.voucher_inventory where order_item_id=v_item.id and status='delivered';
     if v_allocated < v_item.quantity then
+      v_before:=v_allocated;
       with candidates as (
         select id from public.voucher_inventory
         where product_id=v_item.product_id and status='available'
@@ -34,9 +37,9 @@ begin
       update public.voucher_inventory vi
       set status='delivered',order_item_id=v_item.id
       from candidates c where vi.id=c.id;
-      get diagnostics v_allocated = row_count;
-      if v_allocated < (v_item.quantity-(select count(*) from public.voucher_inventory where order_item_id=v_item.id and status='delivered')+v_allocated) then
-        raise exception 'Insufficient voucher inventory for product %',v_item.product_id;
+      select count(*) into v_after from public.voucher_inventory where order_item_id=v_item.id and status='delivered';
+      if v_after < v_item.quantity then
+        raise exception 'Insufficient voucher inventory for product % (needed %, available %)',v_item.product_id,v_item.quantity,v_after;
       end if;
     end if;
     v_total:=v_total+v_item.quantity;
