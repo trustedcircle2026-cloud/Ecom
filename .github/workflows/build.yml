@@ -13,3 +13,7 @@ jobs:
           node-version: 20
       - run: npm install
       - run: npm run build
+      - name: Check Netlify function and API syntax
+        run: |
+          node --check netlify/functions/api.js
+          for file in api/*.js; do node --check "$file"; done
