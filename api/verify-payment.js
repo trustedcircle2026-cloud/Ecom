@@ -5,7 +5,7 @@ const json=(res,status,body)=>res.status(status).setHeader('Content-Type','appli
 export default async function handler(req,res){
  if(req.method!=='POST')return json(res,405,{error:'Method not allowed'})
  try{
-  const token=(req.headers.authorization||'').replace(/^Bearer\\s+/i,'')
+ const token=(req.headers.authorization||'').replace(/^Bearer\s+/i,'')
   const {data:{user},error:authError}=await supabase.auth.getUser(token)
   if(authError||!user)return json(res,401,{error:'Sign in required'})
   const {razorpay_order_id,razorpay_payment_id,razorpay_signature,order_id}=req.body||{}
